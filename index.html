@@ -1,15 +1,599 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <link rel="icon" href="/favicon.ico">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vite App</title>
-    <script type="module" crossorigin src="/assets/index-caaca6b8.js"></script>
-    <link rel="stylesheet" href="/assets/index-9f680dd7.css">
-  </head>
-  <body>
-    <div id="app">我是测试</div>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+        <title>Babylon.js sample code</title>
+
+        <!-- Babylon.js -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
+        <script src="https://assets.babylonjs.com/generated/Assets.js"></script>
+        <script src="https://preview.babylonjs.com/ammo.js"></script>
+        <script src="https://preview.babylonjs.com/cannon.js"></script>
+        <script src="https://preview.babylonjs.com/Oimo.js"></script>
+        <script src="https://preview.babylonjs.com/earcut.min.js"></script>
+        <script src="https://preview.babylonjs.com/babylon.js"></script>
+        <script src="https://preview.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+        <script src="https://preview.babylonjs.com/proceduralTexturesLibrary/babylonjs.proceduralTextures.min.js"></script>
+        <script src="https://preview.babylonjs.com/postProcessesLibrary/babylonjs.postProcess.min.js"></script>
+        <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+        <script src="https://preview.babylonjs.com/serializers/babylonjs.serializers.min.js"></script>
+        <script src="https://preview.babylonjs.com/gui/babylon.gui.min.js"></script>
+        <script src="https://preview.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
+
+        <style>
+            html, body {
+                overflow: hidden;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+
+            #renderCanvas {
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
+        </style>
+    </head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+    <script>
+        var canvas = document.getElementById("renderCanvas");
+
+        var startRenderLoop = function (engine, canvas) {
+            engine.runRenderLoop(function () {
+                if (sceneToRender && sceneToRender.activeCamera) {
+                    sceneToRender.render();
+                }
+            });
+        }
+
+        var engine = null;
+        var scene = null;
+        var sceneToRender = null;
+        var createDefaultEngine = function() { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true,  disableWebGL2Support: false}); };
+        let dAcc = 0
+let keys = {}
+let obstacles = []
+let isLocked = false
+let speed = 15
+let onObject = false
+
+class Player {
+    constructor(scene){
+        this.createBody(scene);
+        this.attractors = [];
+        this.agSystem = null;
+        this.lineSystem = null
+    }
     
-  </body>
+    createBody(scene){
+        this.bottom = BABYLON.MeshBuilder.CreateSphere('', { diameter: 1, segments: 4 }, scene);
+        this.bottom.isPickable = false
+        // bottom.material = wireframeMaterial;
+        this.bottom.position.y -= 0.5;
+        this.bottom.isVisible = false
+
+        this.middle = BABYLON.MeshBuilder.CreateCylinder('', { diameter: 1, height: 1 }, scene);
+        // middle.material = wireframeMaterial;
+        this.middle.setParent(this.bottom);
+        this.middle.isPickable = false
+        this.middle.isVisible = false
+
+        this.top = BABYLON.MeshBuilder.CreateSphere('', { diameter: 1, segments: 4 }, scene);
+        this.top.position.y += 0.5;
+        this.top.isVisible = false
+        this.top.isPickable = false
+        // top.material = wireframeMaterial;
+
+        this.mainMesh = new BABYLON.Mesh('', scene);
+        this.mainMesh.addChild(this.bottom);
+        this.mainMesh.addChild(this.middle);
+        this.mainMesh.addChild(this.top);
+        this.mainMesh.position.y += 1;
+        // var this.mainMesh = MeshBuilder.CreateBox('this.mainMesh',{height:2})
+        scene.enablePhysics(new BABYLON.Vector3(0,-9.81,0), new BABYLON.CannonJSPlugin())
+
+        this.mainMesh.position.y += 1
+
+        this.bottom.physicsImpostor = new BABYLON.PhysicsImpostor(this.bottom,
+                BABYLON.PhysicsImpostor.SphereImpostor, {
+                mass: 0,
+        }, scene);
+            // bottom.physicsImpostor.physicsBody.angularDamping = 1;
+        this.middle.physicsImpostor = new BABYLON.PhysicsImpostor(this.middle,
+                BABYLON.PhysicsImpostor.CylinderImpostor, {
+                mass: 0,
+        }, scene);
+        this.top.physicsImpostor = new BABYLON.PhysicsImpostor(this.top,
+                BABYLON.PhysicsImpostor.SphereImpostor, {
+                mass: 0,
+        }, scene);
+
+        this.mainMesh.physicsImpostor = new BABYLON.PhysicsImpostor(this.mainMesh,
+                BABYLON.PhysicsImpostor.NoImpostor, {
+                    mass:10,
+                    friction: 0.5
+        }, scene);
+        // this.mainMesh.physicsImpostor = new PhysicsImpostor(this.mainMesh,PhysicsImpostor.BoxImpostor,{mass:1})
+        this.mainMesh.physicsImpostor.physicsBody.angularDamping = 1
+        this.mainMesh.physicsImpostor.physicsBody.linearDamping = 0.5
+
+        this.mainMesh.isPickable = false
+        this.mainMesh.position.y = 5
+        this.mainMesh.isVisible = false
+        this.mainMesh.position.z += 5
+        this.body = this.mainMesh.getPhysicsImpostor()
+        // this.body.setMass(2)
+    }
+    createFirstPersonScene(){
+        this.firstPersonScene = new BABYLON.Scene(engine);
+        this.firstPersonScene.autoClear = false
+        
+        // Camera
+        this.fpCam = new BABYLON.FreeCamera("Camera",new BABYLON.Vector3(-1,0,-7),this.firstPersonScene);
+        // this.gun1 = []
+        // this.fpCam.position = new BABYLON.Vector3(-1,2,-15)
+
+        let gun1 = []
+        var light2 = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0, 1, 0), this.firstPersonScene);
+        let fpsScene = this.firstPersonScene
+        BABYLON.SceneLoader.ImportMesh("", "https://raw.githubusercontent.com/Saathvik-s/files-for-games/main/", "gun.gltf", fpsScene, function (newMeshes) {
+            for(let m of newMeshes){
+                // m.isVisible = false
+                // console.log(m)
+                // m.position.y += 5
+                m.rotation.y -= Math.PI/1.05
+                m.rotation.x += Math.PI/28
+                m.position.y -= 1
+                m.position.z -= 1.5
+                
+                // m.rotation.y -= Math.PI
+            }
+            // for(m of newMeshes){
+            //     m.position = new BABYLON.Vector3(30,-0.5,0)
+            //     m.rotation.y -= Math.PI/1.05
+            //     gun1.push(m)
+            // }
+            // gun.scaling.scale(0.15)
+        });
+        
+        this.antiGravGun = gun1
+        this.antiGravGunActive = true
+        this.attractorGunActive = false
+        console.log('hello')
+    }
+    defineRay(scene,camera){
+        this.ray = new BABYLON.Ray(this.mainMesh.position,BABYLON.Vector3.Down(),1.25)
+        // let rayHelper
+       
+        // let sPick = scene.pickWithRay(checkRay)
+        // console.log(sPick)
+    }
+    move(camera,scene){
+        
+        // let onObject = false
+        let curVel = this.body.getLinearVelocity()
+        
+        if(keys['w']){
+            let frontVec = camera.getDirection(BABYLON.Vector3.Forward()).scale(speed)
+            frontVec.y = 0
+            let fVec = new BABYLON.Vector3(frontVec.x,curVel.y,frontVec.z)
+            this.body.setLinearVelocity(fVec)
+        }
+        if(keys['s']){
+            let backVec = camera.getDirection(BABYLON.Vector3.Backward()).scale(speed)
+            backVec.y = 0
+            let bVec = new BABYLON.Vector3(backVec.x,curVel.y,backVec.z)
+            this.body.setLinearVelocity(bVec)
+        }
+        if(keys['a']){
+            let leftVec = camera.getDirection(BABYLON.Vector3.Left()).scale(speed)
+            leftVec.y = 0
+            let lVec = new BABYLON.Vector3(leftVec.x,curVel.y,leftVec.z)
+            this.body.setLinearVelocity(lVec)
+        }
+        if(keys['d']){
+            let rightVec = camera.getDirection(BABYLON.Vector3.Right()).scale(speed)
+            rightVec.y = 0
+            let rVec = new BABYLON.Vector3(rightVec.x,rightVec.y,rightVec.z)
+            this.body.setLinearVelocity(rVec)
+        }
+
+        if(keys['x']){
+            console.log(engine.getFps().toFixed())
+        }
+        
+        
+        // if(keys['s']){
+        //     dAcc = -1.5
+        //     vel = camera.getDirection(BABYLON.Vector3.Forward()).scale(-length + dAcc)
+        //     vel.y = curVel.y
+        // }
+         if(keys[' ']){
+            //  console.log(pick.hit)
+            
+            
+            this.ray.origin = this.mainMesh.position
+            let pick = scene.pickWithRay(this.ray)
+            if(pick){
+                onObject = pick.hit
+            }
+            // console.log(scene.pickWithRay(this.ray))
+            if(onObject){
+                this.body.applyImpulse(BABYLON.Vector3.Up().scale(15),this.mainMesh.getAbsolutePosition())
+                // vel.addInPlace(BABYLON.Vector3.Up().scale(2))
+                onObject = false
+            }
+        }
+        // if(keys['%']){
+        //     console.log('left key pressed')
+        //     scene.getPhysicsEngine().setGravity(BABYLON.Vector3.Left().scale(-9.81))
+        // }
+
+        // this.body.setLinearVelocity(vel)
+        if(keys['2']){
+            this.attractorGunActive = true
+            this.antiGravGunActive = false
+        }
+        if(keys['1']){
+            this.attractorGunActive = false
+            this.antiGravGunActive = true
+        }
+    }
+    // setSystem(system){
+
+    // }
+    
+    shootWithAgGun(camera,scene){
+        let checkRay = new BABYLON.Ray(camera.position,camera.getDirection(BABYLON.Vector3.Forward()),50)
+        let sPick = scene.pickWithRay(checkRay)
+        let pickedMesh = null
+        
+        // var particleSystem = new BABYLON.ParticleSystem("particles", 2000, scene);
+
+    //Texture of each particle
+   
+        
+        if(sPick){
+            if(sPick.hit){
+                console.log('shoot')
+
+                pickedMesh = sPick.pickedMesh
+                //  particleSystem.particleTexture = new BABYLON.Texture("/textures/flare.png", scene);
+
+    // // Where the particles come from
+    // particleSystem.emitter = this.top; // the starting object, the emitter
+    // particleSystem.minEmitBox = new BABYLON.Vector3(-1, 0, 0); // Starting all from
+    // particleSystem.maxEmitBox = pickedMesh.position // To...
+
+    // // Colors of all particles
+    // particleSystem.color1 = new BABYLON.Color4(0.7, 0.8, 1.0, 1.0);
+    // particleSystem.color2 = new BABYLON.Color4(0.2, 0.5, 1.0, 1.0);
+    // particleSystem.colorDead = new BABYLON.Color4(0, 0, 0.2, 0.0);
+
+    // // Size of each particle (random between...
+    // particleSystem.minSize = 0.1;
+    // particleSystem.maxSize = 0.5;
+
+    // // Life time of each particle (random between...
+    // particleSystem.minLifeTime = 0.3;
+    // particleSystem.maxLifeTime = 1.5;
+    // particleSystem.targetStopDuration = 0.1
+
+    // // Emission rate
+    // particleSystem.emitRate = 1500;
+
+    // // Blend mode : BLENDMODE_ONEONE, or BLENDMODE_STANDARD
+    // particleSystem.blendMode = BABYLON.ParticleSystem.BLENDMODE_ONEONE;
+
+    // // Set the gravity of all particles
+    // // particleSystem.gravity = new BABYLON.Vector3(0, -9.81, 0);
+
+    // // Direction of each particle after it has been emitted
+    // particleSystem.direction1 = camera.getDirection(new BABYLON.Vector3(0, 0, 1));
+    // particleSystem.direction2 = camera.getDirection(new BABYLON.Vector3(0, 0, 1));
+
+    // // Angular speed, in radians
+    // particleSystem.minAngularSpeed = 0;
+    // particleSystem.maxAngularSpeed = Math.PI;
+
+    // // Speed
+    // particleSystem.minEmitPower = 1;
+    // particleSystem.maxEmitPower = 3;
+    // particleSystem.updateSpeed = 0.005;
+
+    // particleSystem.isLocal = true;
+
+    // // Start the particle system
+    // particleSystem.start();
+                // console.log(pickedMesh)
+                if(pickedMesh.physicsImpostor != null && pickedMesh.physicsImpostor.mass != 0){
+                    // pickedMesh.physicsImpostor.applyImpulse(scene.getPhysicsEngine().gravity.scale(-2),pickedMesh.getAbsolutePosition())
+                    if(pickedMesh.isAnti == null || pickedMesh.isAnti == false){
+                        pickedMesh.isAnti = true
+                    } else {
+                        pickedMesh.isAnti = false
+                    }
+                    
+                }
+            }
+        }
+        // }
+    }
+    addImpostor(){
+        for(let a of this.attractors){
+            // console.log(a.)
+            if(a.physicsImpostor == null)a.physicsImpostor = new BABYLON.PhysicsImpostor(a,1,{mass:1})
+            if(a.physicsImpostor != null){
+                console.log(a.physicsImpostor)
+            }
+        }
+    }
+    // this.addImpostor()
+
+    shootWithAttractorGun(camera,scene){
+        let lookDir = camera.getDirection(BABYLON.Vector3.Forward())
+        let a = BABYLON.MeshBuilder.CreateSphere('',{diameter:0.25},scene)
+        // a.position = this.mainMesh.position.add(this.top.position.add(new BABYLON.Vector3(-0.75,0.55,0)))
+        a.position = camera.position.add(lookDir)
+        this.attractors.push(a)
+        this.addImpostor()
+        a.physicsImpostor.applyImpulse(lookDir.scale(40),a.getAbsolutePosition())
+    }
+    
+}
+
+class Game {
+    constructor(scene){
+        this.scene = scene
+        this.player = new Player(scene)
+    }
+    createSkybox(scene){
+        var box = BABYLON.Mesh.CreateBox('SkyBox', 1000, scene, false, BABYLON.Mesh.BACKSIDE);
+        box.material = new BABYLON.SkyMaterial('sky', scene);
+        box.material.inclination = 0;
+        box.infiniteDistance = true
+    }
+    update(camera,scene){
+        camera.position = this.player.top.getAbsolutePosition()
+        for(let m of scene.meshes){
+            if(m.physicsImpostor != null && m.physicsImpostor.mass != 0 &&m.isAnti == true){
+                m.physicsImpostor.applyForce(scene.getPhysicsEngine().gravity.scale(-2),m.getAbsolutePosition())
+            }
+        }
+        
+        // camera.upVector = scene.getPhysicsEngine().gravity.normalize().scale(-1)
+    }
+    handleKeyEvents(scene){
+        scene.onKeyboardObservable.add(function(e){
+            switch(e.type){
+                case BABYLON.KeyboardEventTypes.KEYDOWN:
+                    // if(e.event.key)
+                // if(e.event.key == 'w'){
+                //     if(onObject){
+                //         keys['w'] = true
+                //     }
+                // }
+                // else{
+                    // console.log(e.event.key)
+                    keys[e.event.key.toLowerCase()] = true
+                // }
+                    // console.log(e.event.key)
+                    break;
+                case BABYLON.KeyboardEventTypes.KEYUP:
+                    keys[e.event.key.toLowerCase()] = false
+                    break;
+            }
+        })
+    }
+    
+    handleClick(scene,camera){
+        let player = this.player
+        scene.onPointerDown = function (evt) {
+            // if(evt.ctrlKey){
+            //     this.player.gravityOff(scene)
+            // }
+        if (document.pointerLockElement !== canvas) {
+            // console.log('Was Already locked: ', document.pointerLockElement === canvas);
+
+            if (!isLocked) {
+                canvas.requestPointerLock = canvas.requestPointerLock || canvas.msRequestPointerLock || canvas.mozRequestPointerLock || canvas.webkitRequestPointerLock || false;
+                if (canvas.requestPointerLock) {
+                    canvas.requestPointerLock();
+                }
+            }
+        }
+
+        //evt === 0 (left mouse click)
+        //evt === 1 (mouse wheel click (not scrolling))
+        //evt === 2 (right mouse click)
+        // if(evt == 0){
+        //     scene.clea
+        // }
+        // if(isLocked){
+        //     if(evt == 0){
+        //         skybox.dispose()
+        //     }
+        // }
+        if(isLocked){
+            // if(evt.which == 1){
+            //     let lookDirection = camera.getDirection(Vector3.Forward())
+            //     let result = shoot(camera.position,lookDirection,10)
+            //     if(result != undefined){
+            //         handleResult(result)
+            //     }
+            // }
+            // if(evt.which == 1){
+                if(player.antiGravGunActive == true)player.shootWithAgGun(camera,scene)
+                if(player.attractorGunActive == true){
+                    player.shootWithAttractorGun(camera,scene)
+                }
+                
+            // }
+        }
+        
+
+    };
+
+    // Event listener when the pointerlock is updated (or removed by pressing ESC for example).
+    var pointerlockchange = function () {
+        var controlEnabled = document.pointerLockElement || document.mozPointerLockElement || document.webkitPointerLockElement || document.msPointerLockElement || false;
+
+        // If the user is already locked
+        if (!controlEnabled) {
+            camera.detachControl(canvas);
+            isLocked = false;
+        } else {
+            camera.attachControl(canvas);
+            isLocked = true;
+        }
+    };
+
+    // Attach events to the document
+    document.addEventListener("pointerlockchange", pointerlockchange, false);
+    document.addEventListener("mspointerlockchange", pointerlockchange, false);
+    document.addEventListener("mozpointerlockchange", pointerlockchange, false);
+    document.addEventListener("webkitpointerlockchange", pointerlockchange, false);
+    }
+}
+
+var createScene = function () {
+    // This creates a basic Babylon Scene object (non-mesh)
+    let scene = new BABYLON.Scene(engine)
+    let camera = new BABYLON.FreeCamera('',new BABYLON.Vector3(0,5,-10),scene)
+    camera.attachControl(canvas,true)
+    camera.minZ = 0
+    let game = new Game(scene)
+    game.createSkybox(scene)
+    game.handleKeyEvents(scene)
+    
+    let hemLight = new BABYLON.HemisphericLight('',BABYLON.Vector3.Up(),scene)
+    // var ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 20, height: 20}, scene);
+    // obstacles.push(ground)
+    var pointLight = new BABYLON.PointLight("pointLight", new BABYLON.Vector3(0,5,0), scene);
+
+    // let p2 = BABYLON.MeshBuilder.CreateGround('ground2',{width:20,height:20})
+    // p2.position.z += 25
+    // obstacles.push(p2)
+
+    // let end = BABYLON.MeshBuilder.CreateGround('',{width:20,height:20})
+    // end.position.z += 50
+    // obstacles.push(end)
+
+    
+    // ground.physicsImpostor = new PhysicsImpostor(ground,PhysicsImpostor.BoxImpostor,{mass:0,friction:1})
+
+    // let shape = MeshBuilder.CreateIcoSphere('',{})
+    // shape.position.y += 1
+    // shape.isPickable = true
+    // shape.physicsImpostor = new PhysicsImpostor(shape,PhysicsImpostor.SphereImpostor,{mass:1})
+    shape2 = BABYLON.MeshBuilder.CreateTiledBox('box',{})
+    shape2.position.y += 1
+    shape2.position.z += 5
+    shape2.isPickable = true
+    shape2.physicsImpostor = new BABYLON.PhysicsImpostor(shape2,BABYLON.PhysicsImpostor.BoxImpostor,{mass:1})
+    var isLocked = false;
+    // console.log(shape2.isPickable)
+
+    // let tiltedPlatform = BABYLON.MeshBuilder.CreateGround('tilted',{width:5,height:10})
+    // tiltedPlatform.rotation.z = Math.PI/3
+    // tiltedPlatform.position.z = end.position.z+25
+    // obstacles.push(tiltedPlatform)
+
+    // let n = BABYLON.MeshBuilder.CreateGround('n',{width:20,height:20})
+    // n.position.z = tiltedPlatform.position.z + 20
+    // obstacles.push(n)
+    // let room = BABYLON.MeshBuilder.CreateBox('room',{size:50})
+    // room.material = new BABYLON.StandardMaterial('',scene)
+    // room.material.backFaceCulling = false
+    let floor = BABYLON.MeshBuilder.CreateGround('',{width:30,height:30})
+    let wall1 = BABYLON.MeshBuilder.CreateBox('left wall',{width:1,height:20,depth:30})
+    wall1.position.x -= 15
+    obstacles.push(wall1)
+    let wall2 = BABYLON.MeshBuilder.CreateBox('right wall',{width:1,height:20,depth:30})
+    wall2.position.x += 15
+    obstacles.push(wall2)
+    obstacles.push(floor)
+    let wall3 = BABYLON.MeshBuilder.CreateBox('back wall',{width:30,height:20,depth:1})
+    wall3.position.z -= 15
+    obstacles.push(wall3)
+    let wall4 = BABYLON.MeshBuilder.CreateBox('front wall',{width:30,height:20,depth:1})
+    wall4.position.z += 15
+    obstacles.push(wall4)
+    let ceiling = BABYLON.MeshBuilder.CreateGround('',{width:30,height:30})
+    ceiling.position.y += 10
+    obstacles.push(ceiling)
+    
+    // room.physicsImpostor = new BABYLON.PhysicsImpostor(room,BABYLON.PhysicsImpostor.BoxImpostor,{mass:0})
+    // obstacles.push(room)
+    for(let o of obstacles){
+        o.physicsImpostor = new BABYLON.PhysicsImpostor(o,BABYLON.PhysicsImpostor.BoxImpostor,{mass:0})
+        o.material = new BABYLON.StandardMaterial("Mat", scene);
+        o.material.diffuseTexture = new BABYLON.Texture("https://raw.githubusercontent.com/Saathvik-s/files-for-games/main/prototype_material.png", scene);
+        o.material.backFaceCulling = false
+        o.material.specularColor = new BABYLON.Color3(0.5,0.5,0.5)
+        // o.material.roughness = 1
+    }
+    
+    game.player.defineRay(scene,camera)
+    game.handleClick(scene,camera)
+    game.player.createFirstPersonScene()
+
+    var advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
+    var image = new BABYLON.GUI.Image('crosshair','https://raw.githubusercontent.com/Saathvik-s/files-for-games/main/crosshair.png');
+    image.width = 0.2;
+    image.height = "40px";
+    image.populateNinePatchSlicesFromImage = true;
+    // image.stretch = BABYLON.GUI.Image.STRETCH_NINE_PATCH;
+    image.rotation = Math.PI/2
+    image.scaleX = 0.25
+    image.scaleY = 0.5
+    advancedTexture.addControl(image);  
+
+	
+    scene.registerBeforeRender(function(){
+        game.update(camera,scene)
+        game.player.move(camera,scene)
+    })
+
+    setTimeout(function() {
+        engine.stopRenderLoop();
+
+        engine.runRenderLoop(function () {
+            scene.render();
+            game.player.firstPersonScene.render();
+        });
+    }, 500);
+
+    
+    return scene;
+};
+                window.initFunction = async function() {
+                    
+                    
+                    var asyncEngineCreation = async function() {
+                        try {
+                        return createDefaultEngine();
+                        } catch(e) {
+                        console.log("the available createEngine function failed. Creating the default engine instead");
+                        return createDefaultEngine();
+                        }
+                    }
+
+                    window.engine = await asyncEngineCreation();
+        if (!engine) throw 'engine should not be null.';
+        startRenderLoop(engine, canvas);
+        window.scene = createScene();};
+        initFunction().then(() => {sceneToRender = scene                    
+        });
+
+        // Resize
+        window.addEventListener("resize", function () {
+            engine.resize();
+        });
+    </script>
+</body>
 </html>
